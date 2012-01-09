@@ -48,10 +48,11 @@ set (PROJECT_VER
 set (PROJECT_APIVER 
   "${PROJECT_VER_MAJOR}.${PROJECT_VER_MINOR}")
 
-OPTION(BUILD_AUDIO "Build audio support" OFF)
+OPTION(BUILD_rMARY "Build support for W&M's rMary" ON)
+OPTION(BUILD_AUDIO "Build audio support" ON)
 OPTION(BUILD_REDIST_PACKAGE "Build libfreenect in a legally-redistributable manner (only affects audio)" OFF)
 OPTION(BUILD_EXAMPLES "Build example programs" ON)
-OPTION(BUILD_FAKENECT "Build fakenect mock library" ON)
+OPTION(BUILD_FAKENECT "Build fakenect mock library" OFF)
 OPTION(BUILD_C_SYNC "Build c synchronous library" ON)
 OPTION(BUILD_CPP "Build C++ Library (currently header only)" ON)
 OPTION(BUILD_CV "Build OpenCV wrapper" OFF)
