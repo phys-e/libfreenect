@@ -1,10 +1,10 @@
-/* rMary_glpcsoundrec.c
+/* rMary_glpclsoundrec.c
  * Combines libfreenect's 'glpcview' and 'wavrec' to simultaneously record wav data
  * (4 channels) and gl point-cloud image from kinect
  *
  * Eric A. Dieckman (WM)
  * 05 Jan 2012
- * Last edited: 05 January 2012 EAD
+ * Last edited: 09 January 2012 EAD
 */
 
  /*
@@ -57,10 +57,15 @@
 #include <stdlib.h>
 #include <math.h>
 
+pthread_t freenect_thread;
+int die = 0;
+
+int g_argc;
+char **g_argv;
+
 // AUDIO PART:
 static freenect_context* f_ctx;
 static freenect_device* f_dev;
-int die = 0;
 
 char wavheader[] = {
 	0x52, 0x49, 0x46, 0x46, // ChunkID = "RIFF"
@@ -265,28 +270,35 @@ void InitGL(int Width, int Height)
     ReSizeGLScene(Width, Height);
 }
 
-// Main has both audio and glpc parts
-int main(int argc, char **argv)
+void *gl_threadfunc(void *arg) // GL part (video)
 {
-	pthread_t audio_thread, glpc_thread;
+    printf("GL thread\n");
 
-	if (freenect_init(&f_ctx, NULL) < 0) {
-		printf("freenect_init() failed\n");
-		return 1;
-	}
-	freenect_set_log_level(f_ctx, FREENECT_LOG_SPEW);
-	freenect_select_subdevices(f_ctx, FREENECT_DEVICE_AUDIO);
+	glutInit(&g_argc, g_argv);
 
-	int nr_devices = freenect_num_devices (f_ctx);
-	printf ("Number of devices found: %d\n", nr_devices);
-	if (nr_devices < 1)
-		return 1;
+	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
+	glutInitWindowSize(640, 480);
+	glutInitWindowPosition(0, 0);
 
-	int user_device_number = 0;
-	if (freenect_open_device(f_ctx, &f_dev, user_device_number) < 0) {
-		printf("Could not open device\n");
-		return 1;
-	}
+	window = glutCreateWindow("LibFreenect");
+
+	glutDisplayFunc(&DrawGLScene);
+	glutIdleFunc(&DrawGLScene);
+	glutReshapeFunc(&ReSizeGLScene);
+	glutKeyboardFunc(&keyPressed);
+    glutMotionFunc(&mouseMoved);
+    glutMouseFunc(&mousePress);
+
+	InitGL(640, 480);
+	
+	glutMainLoop();
+
+    return NULL;
+}
+
+void *freenect_threadfunc(void *arg) // freenect part (audio!)
+{
+	printf("Freenect thread\n");
 
 	capture state;
 	state.logfiles[0] = fopen("channel1.wav", "wb");
@@ -303,32 +315,15 @@ int main(int argc, char **argv)
 	freenect_start_audio(f_dev);
 	signal(SIGINT, cleanup);
 
-	while(!die && freenect_process_events(f_ctx) >= 0) {
+	while(!die && freenect_process_events(f_ctx) >= 0) 
+	{
 		// stick new stuff in here?
 	}
-		
-	glutInit(&argc, argv);
-
-   	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_ALPHA | GLUT_DEPTH);
-   	glutInitWindowSize(640, 480);
-   	glutInitWindowPosition(0, 0);
-
- 	window = glutCreateWindow("LibFreenect");
-
-	glutDisplayFunc(&DrawGLScene);
-	glutIdleFunc(&DrawGLScene);
-   	glutReshapeFunc(&ReSizeGLScene);
-   	glutKeyboardFunc(&keyPressed);
-   	glutMotionFunc(&mouseMoved);
-   	glutMouseFunc(&mousePress);
-
-   	InitGL(640, 480);
-
-   	glutMainLoop();
 
 	// Make the WAV header valid for each of the four files
 	int i;
-	for(i = 0; i < 4 ; i++) {
+	for(i = 0; i < 4 ; i++) 
+	{
 		char buf[4];
 		fseek(state.logfiles[i], 4, SEEK_SET);
 		// Write ChunkSize = 36 + subchunk2size
@@ -349,6 +344,41 @@ int main(int argc, char **argv)
 		fwrite(buf, 1, 4,state.logfiles[i]);
 		fclose(state.logfiles[i]);
 	}
+
+	return NULL;
+}
+
+
+// Main has both audio and glpc parts
+int main(int argc, char **argv)
+{
+	if (freenect_init(&f_ctx, NULL) < 0) {
+		printf("freenect_init() failed\n");
+		return 1;
+	}
+	freenect_set_log_level(f_ctx, FREENECT_LOG_SPEW);
+	freenect_select_subdevices(f_ctx, FREENECT_DEVICE_AUDIO);
+
+	int nr_devices = freenect_num_devices (f_ctx);
+	printf ("Number of devices found: %d\n", nr_devices);
+	if (nr_devices < 1)
+		return 1;
+
+	int user_device_number = 0;
+	if (freenect_open_device(f_ctx, &f_dev, user_device_number) < 0) {
+		printf("Could not open device\n");
+		return 1;
+	}
+
+	int res = pthread_create(&freenect_thread, NULL, freenect_threadfunc, NULL);
+	if (res)
+	{
+		printf("pthread_create failed\n");
+		return 1;
+	}
+	
+	gl_threadfunc(NULL); // GLUT runs on main thread (OS X reqt?)
+
     return 0;
 }
 
